@@ -24,12 +24,14 @@ pipeline {
 
     post {
     success {
-        archiveArtifacts artifacts: 'build.txt',
-        echo 'Build successful, artifact archived.'
+        steps {
+            archiveArtifacts artifacts: 'build.txt',
+            echo 'Build successful, artifact archived.'
     }
     failure {
         echo 'Build failed.'
     }
+    }  
         
 }
 
