@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-svc
+  namespace: test
+spec:
+  nodeName: test
+  type: ClusterIP
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+  tolerations:
+    - key: "jenkins"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: test
+spec:
+  nodeName: test
+  serviceName: mysql-svc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      serviceAccountName: dbuser
+      nodeSelector:
+        kubernetes.io/hostname: test
+      securityContext:
+        fsGroup: 999                  
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - containerPort: 3306
+              name: mysql
+      tolerations:
+         - key: "jenkins"
+           operator: "Equal"
+           value: "true"
+           effect: "NoSchedule"
+          args:
+            - --slow-query-log=1
+            - --long-query-time=2
+            - --log-output=TABLE
+          env:
+            - name: MYSQL_LOG_CONSOLE
+              value: "true"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: password
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql 
+          resources:
+            requests:
+              memory: "100Mi"
+            limits:
+              memory: "500Mi"
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-persistent-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "mysql-sc"    
+      resources:
+        requests:
+          storage: 2Gi
+  ---
+  apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mysql-pv
+spec:
+  capacity:
+    storage: 2Gi
+  nodename: test
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: mysql-sc
+  hostPath:
+    path: /data/mysql
