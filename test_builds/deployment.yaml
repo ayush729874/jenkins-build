@@ -4,7 +4,6 @@ metadata:
   name: mysql-svc
   namespace: test
 spec:
-  nodeName: test
   type: ClusterIP
   selector:
     app: mysql
@@ -12,11 +11,6 @@ spec:
     - name: mysql
       port: 3306
       targetPort: 3306
-  tolerations:
-    - key: "jenkins"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -24,7 +18,6 @@ metadata:
   name: mysql
   namespace: test
 spec:
-  nodeName: test
   serviceName: mysql-svc
   replicas: 1
   selector:
@@ -39,22 +32,22 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: test
       securityContext:
-        fsGroup: 999                  
+        fsGroup: 999
+      tolerations:
+        - key: "jenkins"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
       containers:
         - name: mysql
           image: mysql:8.0
-          ports:
-            - containerPort: 3306
-              name: mysql
-      tolerations:
-         - key: "jenkins"
-           operator: "Equal"
-           value: "true"
-           effect: "NoSchedule"
           args:
             - --slow-query-log=1
             - --long-query-time=2
             - --log-output=TABLE
+          ports:
+            - containerPort: 3306
+              name: mysql
           env:
             - name: MYSQL_LOG_CONSOLE
               value: "true"
@@ -65,7 +58,7 @@ spec:
                   key: password
           volumeMounts:
             - name: mysql-persistent-storage
-              mountPath: /var/lib/mysql 
+              mountPath: /var/lib/mysql
           resources:
             requests:
               memory: "100Mi"
@@ -76,26 +69,185 @@ spec:
             runAsGroup: 999
             allowPrivilegeEscalation: false
   volumeClaimTemplates:
-  - metadata:
-      name: mysql-persistent-storage
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      storageClassName: "mysql-sc"    
-      resources:
-        requests:
-          storage: 2Gi
-  ---
-  apiVersion: v1
+    - metadata:
+        name: mysql-persistent-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: "mysql-sc"
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: mysql-pv
 spec:
   capacity:
     storage: 2Gi
-  nodename: test
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - test
   accessModes:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   storageClassName: mysql-sc
   hostPath:
     path: /data/mysql
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: test
+data:
+  DB_HOST: mysql-svc
+  DB_NAME: appdb
+  DB_PORT: "3306"
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secret
+  namespace: test
+type: Opaque
+data:
+  DB_USER: QXBwdXNlcg==      
+  DB_PASSWORD: QXl1c2hAMTIz 
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: test
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: test
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      tolerations:
+        - key: "jenkins"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      containers:
+      - name: backend
+        image: ayush2744/backend:v3
+        ports:
+        - containerPort: 8001
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "200m"
+            memory: "200Mi"
+        env:
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_HOST
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_NAME
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DB_PORT
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: DB_PASSWORD
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+  - port: 8001
+    targetPort: 8001
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: test
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: test
+  tolerations:
+    - key: "jenkins"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: ayush2744/frontend:v3
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "200m"
+            memory: "200Mi"
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: test
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+    nodePort: 30080
