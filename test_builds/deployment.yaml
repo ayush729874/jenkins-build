@@ -79,6 +79,14 @@ spec:
             storage: 2Gi
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque
+data:
+  password: QXl1c2hAMTIz
+---
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: mysqltest-pv
