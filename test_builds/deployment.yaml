@@ -160,7 +160,7 @@ spec:
       - name: backend
         image: ayush2744/backend:v3
         ports:
-        - containerPort: 8001
+        - containerPort: 8000
         resources:
           requests:
             cpu: "100m"
@@ -206,8 +206,8 @@ spec:
   selector:
     app: backend
   ports:
-  - port: 8001
-    targetPort: 8001
+  - port: 8000
+    targetPort: 8000
 ---
 
 apiVersion: apps/v1
