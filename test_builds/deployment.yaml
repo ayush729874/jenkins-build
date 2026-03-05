@@ -214,13 +214,6 @@ metadata:
   name: frontend
   namespace: test
 spec:
-  nodeSelector:
-    kubernetes.io/hostname: test
-  tolerations:
-    - key: "jenkins"
-      operator: "Equal"
-      value: "true"
-      effect: "NoSchedule"
   replicas: 1
   selector:
     matchLabels:
@@ -229,7 +222,14 @@ spec:
     metadata:
       labels:
         app: frontend
-    spec:
+    spec:  
+      nodeSelector:
+        kubernetes.io/hostname: test
+      tolerations:
+        - key: "jenkins"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
       containers:
       - name: frontend
         image: ayush2744/frontend:v3
