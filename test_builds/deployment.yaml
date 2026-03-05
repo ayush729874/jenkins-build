@@ -266,8 +266,8 @@ kind: Ingress
 metadata:
   name: test-ingress
   namespace: test
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+  #annotations:
+    #nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx  
   rules:
