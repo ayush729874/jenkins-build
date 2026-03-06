@@ -114,15 +114,20 @@ pipeline {
             steps {
                 script {
                     sh """
+                        cd /tmp
+                        rm -rf k8s-manifests
+                        git clone git@github-manifests:ayush729874/k8s-manifests.git
+                        cd k8s-manifests
+    
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins"
-
+    
                         sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
                         sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
-
+    
                         git add test_builds/deployment.yaml
                         git commit -m "Updated image tag to ${env.IMAGE_TAG}"
-                        git push git@github.com:ayush729874/jenkins-build.git HEAD:main
+                        git push git@github-manifests:ayush729874/k8s-manifests.git HEAD:main
                     """
                 }
             }
