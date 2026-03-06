@@ -91,11 +91,14 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                        docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
-                        docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
-                        docker logout
+                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        if (env.BUILD_FRONTEND == "true") {
+                            sh "docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}"
+                        }
+                        if (env.BUILD_BACKEND == "true") {
+                            sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
+                        }
+                        sh "docker logout"
                     """
                 }
             }
