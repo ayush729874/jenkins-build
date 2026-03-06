@@ -23,7 +23,12 @@ pipeline {
                         currentBuild.result = 'NOT_BUILT'
                         return
                     }
-                    env.SHOULD_BUILD = "true"
+                    env.BUILD_FRONTEND = changedFiles.contains('frontend/') ? "true" : "false"
+                    env.BUILD_BACKEND  = changedFiles.contains('backend/')  ? "true" : "false"
+                    env.SHOULD_BUILD   = "true"
+
+                    echo "Build frontend: ${env.BUILD_FRONTEND}"
+                    echo "Build backend: ${env.BUILD_BACKEND}"
                 }
             }
         }
@@ -65,12 +70,14 @@ pipeline {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
-                sh """
-                    docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./frontend
-                    docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ./backend
-                """
-            }
-        }
+                script {
+                     if (env.BUILD_FRONTEND == "true") {
+                         sh "docker build -t ${FRONTEND_IMAGE}:${env.IMAGE_TAG} ./frontend"
+                     }
+                     if (env.BUILD_BACKEND == "true") {
+                         sh "docker build -t ${BACKEND_IMAGE}:${env.IMAGE_TAG} ./backend"
+                     }
+                }
         
         stage('Push to DockerHub') {
             when {
