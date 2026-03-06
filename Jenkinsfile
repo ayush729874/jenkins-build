@@ -3,9 +3,9 @@ pipeline {
     environment {
         FRONTEND_IMAGE = "ayush2744/frontend"
         BACKEND_IMAGE  = "ayush2744/backend"
-        
+
     }
-    
+
     stages {
         stage('Check Changes') {
             steps {
@@ -14,10 +14,10 @@ pipeline {
                         script: 'git diff --name-only HEAD~1 HEAD',
                         returnStdout: true
                     ).trim()
-                    
+
                     echo "Changed files: ${changedFiles}"
-                    
-                    if (!changedFiles.contains('frontend/') && 
+
+                    if (!changedFiles.contains('frontend/') &&
                         !changedFiles.contains('backend/')) {
                         echo "No changes in frontend or backend, skipping build!"
                         currentBuild.result = 'NOT_BUILT'
@@ -61,7 +61,7 @@ pipeline {
                   def nextTag = latestTag ? latestTag.toInteger() + 1 : 1
                   env.IMAGE_TAG = "v${nextTag}"
                   echo "New image tag will be: ${env.IMAGE_TAG}"
-                
+
                }
             }
         }
@@ -80,7 +80,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Push to DockerHub') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
@@ -130,7 +130,7 @@ pipeline {
                         rm -rf k8s_builds
                         git clone git@github-manifests:ayush729874/k8s_builds.git
                         cd k8s_builds
-    
+
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins"
                     '''
@@ -146,7 +146,7 @@ pipeline {
                             sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' test_builds/deployment.yaml
                         '''
                     }
-    
+
                     sh '''
                         cd /tmp/k8s_builds
                         git add test_builds/deployment.yaml
