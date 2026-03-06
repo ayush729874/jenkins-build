@@ -18,7 +18,7 @@ pipeline {
         stage('Get latest Tag') {
             steps {
               script {
-                  def latestTag =sh(
+                  def latestTag = sh(
                       script: """
                          curl -s "https://hub.docker.com/v2/repositories/ayush2744/frontend/tags/?page_size=100" \
                          | grep -o '"name":"v[0-9]*"' \
