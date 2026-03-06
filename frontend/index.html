@@ -1,34 +1,136 @@
-<script>
-    async function submitData() {
-        const name = document.getElementById("nameInput").value;
-        const msgBox = document.getElementById("msg");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Treecom</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        if (!name) {
-            msgBox.innerHTML = "<span class='error'>Name is required</span>";
-            return;
-        }
-
-        try {
-            const response = await fetch("/submit", {
-                method: "POST",
-                headers: { 
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ name: name })
-            });
-
-            const result = await response.json();
-
-            // NEW BACKEND FORMAT
-            if (response.ok && result.status === "success") {
-                msgBox.innerHTML = `<span class='success'>${result.message}</span>`;
-            } 
-            else {
-                msgBox.innerHTML = `<span class='error'>Error: ${result.detail || result.error || "Unknown error"}</span>`;
-            }
-
-        } catch (err) {
-            msgBox.innerHTML = "<span class='error'>Backend unreachable</span>";
-        }
+    <style>
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: linear-gradient(135deg, #4f46e5, #06b6d4);
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
+
+    .container {
+        background: white;
+        width: 360px;
+        padding: 32px;
+        border-radius: 18px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+        text-align: center;
+    }
+
+    h2 {
+        margin: 0 0 25px 0;
+        color: #111827;
+        font-size: 24px;
+    }
+
+    label {
+        display: block;
+        text-align: left;
+        font-size: 14px;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    input[type="text"] {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        font-size: 15px;
+        margin-bottom: 22px;
+        box-sizing: border-box;
+        transition: 0.2s;
+    }
+
+    input[type="text"]:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.25);
+    }
+
+    button {
+        width: 100%;
+        padding: 13px;
+        background: #4f46e5;
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background 0.25s;
+    }
+
+    button:hover {
+        background: #4338ca;
+    }
+
+    .message {
+        margin-top: 18px;
+        font-size: 15px;
+        font-weight: 600;
+        min-height: 20px;
+    }
+
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Enter Your Name</h2>
+
+    <label>Your Name</label>
+    <input type="text" id="nameInput" placeholder="Enter your name">
+
+    <button onclick="submitData()">Submit</button>
+
+    <div id="msg" class="message"></div>
+</div>
+
+<script>
+async function submitData() {
+    const name = document.getElementById("nameInput").value;
+    const msgBox = document.getElementById("msg");
+
+    if (!name) {
+        msgBox.innerHTML = "<span class='error'>Name is required</span>";
+        return;
+    }
+
+    try {
+        const response = await fetch("/submit", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ name: name })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.status === "success") {
+            msgBox.innerHTML = `<span class='success'>${result.message}</span>`;
+        } else {
+            msgBox.innerHTML = `<span class='error'>Error: ${result.detail || result.error || "Unknown error"}</span>`;
+        }
+
+    } catch (err) {
+        msgBox.innerHTML = "<span class='error'>Backend unreachable</span>";
+    }
+}
 </script>
+
+</body>
+</html>
