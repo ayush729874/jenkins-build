@@ -1,30 +1,54 @@
 pipeline {
-    agent {
-        label 'build'
+    agent { label 'slave2-node-build' }
+    
+    environment {
+        FRONTEND_IMAGE = "ayush2744/frontend"
+        BACKEND_IMAGE  = "ayush2744/backend"
+        IMAGE_TAG      = "v${BUILD_NUMBER}"  // v1, v2, v3 auto increments
     }
-
+    
     stages {
         stage('Checkout') {
             steps {
-                echo 'Checking out source code...'
+                git credentialsId: 'jenkins',
+                    url: 'https://github.com/ayush729874/jenkins-build.git',
+                    branch: 'main'
             }
         }
-
-        stage('Build') {
+        
+        stage('Build Images') {
             steps {
-                echo 'Building the application...'
-                sh 'touch build.txt'
+                sh """
+                    docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./frontend
+                    docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} ./backend
+                """
             }
         }
-    }
-
-    post {
-        success {
-            archiveArtifacts artifacts: 'build.txt'
-            echo 'Build successful, artifact archived.'
+        
+        stage('Push to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                        docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+                        docker logout
+                    """
+                }
+            }
         }
-        failure {
-            echo 'Build failed.'
+
+        stage('Cleanup') {
+            steps {
+                sh """
+                    docker rmi ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                    docker rmi ${BACKEND_IMAGE}:${IMAGE_TAG}
+                """
+            }
         }
     }
 }
