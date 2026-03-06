@@ -8,9 +8,27 @@ pipeline {
     }
     
     stages {
+        stage('Check Changes') {
+            steps {
+                script {
+                    def changedFiles = sh(
+                        script: 'git diff --name-only HEAD~1 HEAD',
+                        returnStdout: true
+                    ).trim()
+                    
+                    echo "Changed files: ${changedFiles}"
+                    
+                    if (!changedFiles.contains('frontend/') && 
+                        !changedFiles.contains('backend/')) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error('No changes in frontend or backend, skipping build!')
+                    }
+                }
+            }
+        }
         stage('Checkout') {
             steps {
-                git credentialsId: 'jenkins',
+                git credentialsId: 'jenkins-github',
                     url: 'git@github.com:ayush729874/jenkins-build.git',
                     branch: 'main'
             }
@@ -71,27 +89,22 @@ pipeline {
         }
         stage('Update Deployment YAML') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'jenkins',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_PASS'
-                )]) {
-                    script {
-                        sh """
-                            git config user.email "jenkins@ci.com"
-                            git config user.name "Jenkins"
+                script {
+                    sh """
+                        git config user.email "jenkins@ci.com"
+                        git config user.name "Jenkins"
 
-                            sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
-                            sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
+                        sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
+                        sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
 
-                            git add test_builds/deployment.yaml
-                            git commit -m "Updated image tag to ${env.IMAGE_TAG}"
-                            git push https://${GIT_USER}:${GIT_PASS}@github.com/ayush729874/jenkins-build.git HEAD:main
-                        """
-                    }
-                  }
+                        git add test_builds/deployment.yaml
+                        git commit -m "Updated image tag to ${env.IMAGE_TAG}"
+                        git push git@github.com:ayush729874/jenkins-build.git HEAD:main
+                    """
                 }
-              }
+            }
+        }
+    }
 
     }
 }
