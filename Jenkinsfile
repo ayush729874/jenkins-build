@@ -20,9 +20,11 @@ pipeline {
                     
                     if (!changedFiles.contains('frontend/') && 
                         !changedFiles.contains('backend/')) {
+                        echo "No changes in frontend or backend, skipping build!"
                         currentBuild.result = 'NOT_BUILT'
-                        error('No changes in frontend or backend, skipping build!')
+                        return
                     }
+                    env.SHOULD_BUILD = "true"
                 }
             }
         }
@@ -34,6 +36,9 @@ pipeline {
             }
         }
         stage('Get latest Tag') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
               script {
                   def latestTag = sh(
@@ -54,6 +59,9 @@ pipeline {
             }
         }
         stage('Build Images') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
                 sh """
                     docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} ./frontend
@@ -63,6 +71,9 @@ pipeline {
         }
         
         stage('Push to DockerHub') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-credentials',
@@ -80,6 +91,9 @@ pipeline {
         }
 
         stage('Cleanup') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
                 sh """
                     docker rmi ${FRONTEND_IMAGE}:${IMAGE_TAG}
@@ -88,6 +102,9 @@ pipeline {
             }
         }
         stage('Update Deployment YAML') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
                 script {
                     sh """
