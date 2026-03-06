@@ -99,7 +99,7 @@ pipeline {
                             sh "docker push ${BACKEND_IMAGE}:${IMAGE_TAG}"
                         }
                         sh "docker logout"
-                    """
+               
                 }
             }
         }
