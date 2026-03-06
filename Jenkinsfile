@@ -125,14 +125,15 @@ pipeline {
             steps {
                 script {
                     def imageTag = env.IMAGE_TAG
-                    sh """
+                    sh '''
                         cd /tmp
+                        rm -rf k8s_builds
                         git clone git@github-manifests:ayush729874/k8s_builds.git
                         cd k8s_builds
     
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins"
-                    """
+                    '''
                     if (env.BUILD_FRONTEND == "true") {
                         sh """
                             cd /tmp/k8s_builds
