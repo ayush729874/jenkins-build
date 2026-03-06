@@ -4,7 +4,7 @@ pipeline {
     environment {
         FRONTEND_IMAGE = "ayush2744/frontend"
         BACKEND_IMAGE  = "ayush2744/backend"
-        IMAGE_TAG      = "v${BUILD_NUMBER}"  // v1, v2, v3 auto increments
+        
     }
     
     stages {
@@ -15,7 +15,21 @@ pipeline {
                     branch: 'main'
             }
         }
-        
+        stage('Get latest Tag') {
+            steps {
+              script {
+                  def latestTag =sh(
+                      script: """
+                         curl -s "https://hub.docker.com/v2/repositories/ayush2744/frontend/tags/?page_size=100" \
+                         | grep -o '"name":"v[0-9]*"' \
+                         | grep -o '[0-9]*' \
+                         | sort -n \
+                         | tail -1
+                      """,
+                  )
+              }
+            }
+        }
         stage('Build Images') {
             steps {
                 sh """
