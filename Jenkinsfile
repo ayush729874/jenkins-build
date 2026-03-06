@@ -31,7 +31,7 @@ pipeline {
                   def nextTag = latestTag ? latestTag.toInteger() + 1 : 1
                   env.IMAGE_TAG = "v${nextTag}"
                   echo "New image tag will be: ${env.IMAGE_TAG}"
-                  )
+                
                }
             }
         }
