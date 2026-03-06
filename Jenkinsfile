@@ -115,9 +115,9 @@ pipeline {
                 script {
                     sh """
                         cd /tmp
-                        rm -rf k8s-manifests
-                        git clone git@github-manifests:ayush729874/k8s-manifests.git
-                        cd k8s-manifests
+                        rm -rf k8s_builds
+                        git clone git@github-manifests:ayush729874/k8s_builds.git
+                        cd k8s_builds
     
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins"
@@ -127,7 +127,7 @@ pipeline {
     
                         git add test_builds/deployment.yaml
                         git commit -m "Updated image tag to ${env.IMAGE_TAG}"
-                        git push git@github-manifests:ayush729874/k8s-manifests.git HEAD:main
+                        git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
                     """
                 }
             }
