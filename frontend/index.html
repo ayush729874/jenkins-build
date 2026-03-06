@@ -1,0 +1,34 @@
+<script>
+    async function submitData() {
+        const name = document.getElementById("nameInput").value;
+        const msgBox = document.getElementById("msg");
+
+        if (!name) {
+            msgBox.innerHTML = "<span class='error'>Name is required</span>";
+            return;
+        }
+
+        try {
+            const response = await fetch("/submit", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ name: name })
+            });
+
+            const result = await response.json();
+
+            // NEW BACKEND FORMAT
+            if (response.ok && result.status === "success") {
+                msgBox.innerHTML = `<span class='success'>${result.message}</span>`;
+            } 
+            else {
+                msgBox.innerHTML = `<span class='error'>Error: ${result.detail || result.error || "Unknown error"}</span>`;
+            }
+
+        } catch (err) {
+            msgBox.innerHTML = "<span class='error'>Backend unreachable</span>";
+        }
+    }
+</script>
