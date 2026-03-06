@@ -1,6 +1,10 @@
 pipeline {
     agent { label 'slave2-node-build' }
-    
+    triggers {
+        pollSCM('*/2 * * * *') {
+            excludedRegions('test_builds/.*')
+        }
+    }
     environment {
         FRONTEND_IMAGE = "ayush2744/frontend"
         BACKEND_IMAGE  = "ayush2744/backend"
