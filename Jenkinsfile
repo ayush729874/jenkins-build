@@ -109,11 +109,14 @@ pipeline {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
-                sh """
-                    docker rmi ${FRONTEND_IMAGE}:${IMAGE_TAG}
-                    docker rmi ${BACKEND_IMAGE}:${IMAGE_TAG}
-                """
-            }
+                script {
+                    if (env.BUILD_FRONTEND == "true") {
+                        sh "docker rmi ${FRONTEND_IMAGE}:${env.IMAGE_TAG}"
+                    }
+                    if (env.BUILD_BACKEND == "true") {
+                        sh "docker rmi ${BACKEND_IMAGE}:${env.IMAGE_TAG}"
+                    }
+             }
         }
         stage('Update Deployment YAML') {
             when {
