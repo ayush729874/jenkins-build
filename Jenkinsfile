@@ -135,25 +135,25 @@ pipeline {
                         git config user.name "Jenkins"
                     '''
                     if (env.BUILD_FRONTEND == "true") {
-                        sh """
+                        sh '''
                             cd /tmp/k8s_builds
                             sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' test_builds/deployment.yaml
-                        """
+                        '''
                     }
                     if (env.BUILD_BACKEND == "true") {
-                        sh """
+                        sh '''
                             cd /tmp/k8s_builds
                             sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' test_builds/deployment.yaml
-                        """
+                        '''
                     }
     
-                    sh """
+                    sh '''
                         cd /tmp/k8s_builds
                         git add test_builds/deployment.yaml
                         git commit -m "Updated image tag to ${env.IMAGE_TAG}"
                         git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
                         rm -rf k8s_builds
-                    """
+                    '''
                 }
             }
         }
