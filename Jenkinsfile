@@ -10,7 +10,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git credentialsId: 'jenkins-github',
+                git credentialsId: 'jenkins',
                     url: 'git@github.com:ayush729874/jenkins-build.git',
                     branch: 'main'
             }
@@ -72,7 +72,7 @@ pipeline {
         stage('Update Deployment YAML') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'jenkins-github',
+                    credentialsId: 'jenkins',
                     usernameVariable: 'GIT_USER',
                     passwordVariable: 'GIT_PASS'
                 )]) {
