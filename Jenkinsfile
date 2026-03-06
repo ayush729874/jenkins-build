@@ -124,6 +124,7 @@ pipeline {
             }
             steps {
                 script {
+                    def imageTag = env.IMAGE_TAG
                     sh """
                         cd /tmp
                         rm -rf k8s_builds
@@ -132,10 +133,22 @@ pipeline {
     
                         git config user.email "jenkins@ci.com"
                         git config user.name "Jenkins"
+                    """
+                    if (env.BUILD_FRONTEND == "true") {
+                        sh """
+                            cd /tmp/k8s_builds
+                            sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' test_builds/deployment.yaml
+                        """
+                    }
+                    if (env.BUILD_BACKEND == "true") {
+                        sh """
+                            cd /tmp/k8s_builds
+                            sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' test_builds/deployment.yaml
+                        """
+                    }
     
-                        sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
-                        sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${env.IMAGE_TAG}|' test_builds/deployment.yaml
-    
+                    sh """
+                        cd /tmp/k8s_builds
                         git add test_builds/deployment.yaml
                         git commit -m "Updated image tag to ${env.IMAGE_TAG}"
                         git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
