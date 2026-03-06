@@ -29,6 +29,9 @@ pipeline {
             }
         }
         stage('Checkout') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
             steps {
                 git credentialsId: 'jenkins-github',
                     url: 'git@github.com:ayush729874/jenkins-build.git',
