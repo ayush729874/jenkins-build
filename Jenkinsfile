@@ -32,7 +32,7 @@ pipeline {
                   env.IMAGE_TAG = "v${nextTag}"
                   echo "New image tag will be: ${env.IMAGE_TAG}"
                   )
-              }
+               }
             }
         }
         stage('Build Images') {
