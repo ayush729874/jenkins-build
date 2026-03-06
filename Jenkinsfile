@@ -78,6 +78,8 @@ pipeline {
                          sh "docker build -t ${BACKEND_IMAGE}:${env.IMAGE_TAG} ./backend"
                      }
                 }
+            }
+        }
         
         stage('Push to DockerHub') {
             when {
