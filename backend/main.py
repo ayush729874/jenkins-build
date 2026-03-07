@@ -6,6 +6,7 @@ import mysql.connector
 import os
 import string
 import time
+import uuid
 
 # ─────────────────────────────────────────
 #   BASE62 ENCODER
@@ -152,17 +153,20 @@ async def shorten_url(request: ShortenRequest):
 
     cursor = conn.cursor()
     try:
-        # Insert with temp placeholder to get the AUTO_INCREMENT id
+        # Use a unique temp placeholder per request to avoid collisions
+        # under concurrent traffic (uuid4 makes it unique every time)
+        tmp_placeholder = f"__tmp_{uuid.uuid4().hex}__"
+
         cursor.execute(
             "INSERT INTO urls (original_url, short_code) VALUES (%s, %s)",
-            (original, "__tmp__")
+            (original, tmp_placeholder)
         )
         new_id = cursor.lastrowid
 
         # Base62-encode the id as the short code
         short_code = encode_base62(new_id)
 
-        # Update row with real short code
+        # Update row with the real short code
         cursor.execute(
             "UPDATE urls SET short_code = %s WHERE id = %s",
             (short_code, new_id)
@@ -176,9 +180,11 @@ async def shorten_url(request: ShortenRequest):
             original_url=original,
         )
 
-    except mysql.connector.IntegrityError:
+    except mysql.connector.IntegrityError as e:
         conn.rollback()
-        raise HTTPException(status_code=409, detail="Short code collision — please retry.")
+        # This should never happen now with uuid temp placeholders,
+        # but kept as a safety net
+        raise HTTPException(status_code=409, detail=f"Collision error — please retry. ({e})")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
