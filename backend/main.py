@@ -7,9 +7,7 @@ import os
 import string
 import time
 
-# ─────────────────────────────────────────
-#   BASE62 ENCODER
-# ─────────────────────────────────────────
+
 BASE62_CHARS = string.ascii_letters + string.digits  # a-z A-Z 0-9  (62 chars)
 
 def encode_base62(num: int) -> str:
