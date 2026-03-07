@@ -165,5 +165,23 @@ pipeline {
                 }
             }
         }
+        stage('Wait for Test Deploy') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
+            steps {
+                script {
+                    sh '''
+                        argocd app wait argocd-app
+                            --health \
+                            --sync \
+                            --timeout 400 \
+                            --server argocd.treecom.site:30437 \
+                            --auth-token $ARGOCD_TOKEN \
+                            --insecure
+                    '''
+                }
+            }
+        }
     }
 }
