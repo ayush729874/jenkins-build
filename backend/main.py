@@ -65,15 +65,18 @@ def init_db():
     Create tables if they don't exist.
     Retries up to 10 times with 3s delay — MySQL pod may still
     be initializing when the backend starts.
+    Also runs ALTER TABLE to fix column sizes on existing tables.
     """
     for attempt in range(1, 11):
         try:
             conn = get_db()
             cursor = conn.cursor()
+
+            # Create tables with VARCHAR(20) for short_code
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS urls (
                     id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    short_code   VARCHAR(10) NOT NULL UNIQUE,
+                    short_code   VARCHAR(20) NOT NULL UNIQUE,
                     original_url TEXT NOT NULL,
                     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
                     click_count  INT DEFAULT 0
@@ -82,7 +85,7 @@ def init_db():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS feedback (
                     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    short_code  VARCHAR(10) NOT NULL,
+                    short_code  VARCHAR(20) NOT NULL,
                     rating      TINYINT NOT NULL,
                     feedback    VARCHAR(400) DEFAULT NULL,
                     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -90,6 +93,21 @@ def init_db():
                         ON DELETE CASCADE
                 )
             """)
+
+            # ALTER existing tables in case they were created with old VARCHAR(10)
+            # MySQL ignores this if already the right size — safe to run every time
+            try:
+                cursor.execute("ALTER TABLE urls MODIFY short_code VARCHAR(20) NOT NULL")
+                print("[startup] urls.short_code column updated to VARCHAR(20).")
+            except Exception as alter_err:
+                print(f"[startup] ALTER urls skipped: {alter_err}")
+
+            try:
+                cursor.execute("ALTER TABLE feedback MODIFY short_code VARCHAR(20) NOT NULL")
+                print("[startup] feedback.short_code column updated to VARCHAR(20).")
+            except Exception as alter_err:
+                print(f"[startup] ALTER feedback skipped: {alter_err}")
+
             conn.commit()
             cursor.close()
             conn.close()
@@ -126,7 +144,7 @@ class ShortenResponse(BaseModel):
     original_url: str
 
 class FeedbackRequest(BaseModel):
-    short_code: str = Field(..., min_length=1, max_length=10)
+    short_code: str = Field(..., min_length=1, max_length=20)
     rating: int = Field(..., ge=1, le=5)
     feedback: str | None = Field(None, max_length=400)
 
