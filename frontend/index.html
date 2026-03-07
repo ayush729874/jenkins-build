@@ -709,11 +709,19 @@
     document.getElementById('createdTime').textContent =
       now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Always ensure rating form is visible and thank-you is hidden
-    // before showing the rating section (handles repeat usage)
+    // Always fully reset the rating section before showing it
+    // so previous stars/feedback/thankyou never bleed into new requests
+    selectedRating = 0;
     document.getElementById('ratingForm').removeAttribute('style');
     document.getElementById('thankyouSection').classList.remove('visible');
     document.getElementById('thankyouSection').removeAttribute('style');
+    document.getElementById('submitRatingBtn').disabled = true;
+    document.getElementById('submitRatingBtn').textContent = 'Submit Feedback';
+    document.getElementById('feedbackInput').value = '';
+    document.getElementById('charCount').textContent = '0 / 400';
+    document.getElementById('starLabel').textContent = 'Click a star to rate';
+    document.getElementById('starLabel').classList.remove('active');
+    document.querySelectorAll('.star-btn').forEach(s => s.classList.remove('selected', 'hovered'));
 
     document.getElementById('resultSection').classList.add('visible');
     document.getElementById('ratingSection').classList.add('visible');
