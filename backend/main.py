@@ -155,7 +155,7 @@ async def shorten_url(request: ShortenRequest):
     try:
         # Use a unique temp placeholder per request to avoid collisions
         # under concurrent traffic (uuid4 makes it unique every time)
-        tmp_placeholder = f"__tmp_{uuid.uuid4().hex}__"
+        tmp_placeholder = f"t{uuid.uuid4().hex[:8]}"  # 9 chars, unique, fits VARCHAR(10)
 
         cursor.execute(
             "INSERT INTO urls (original_url, short_code) VALUES (%s, %s)",
