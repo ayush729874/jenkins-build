@@ -650,6 +650,7 @@
 <script>
   let selectedRating = 0;
   let currentShortUrl = '';
+  let currentShortCode = '';
   const starLabels = ['', 'Poor', 'Fair', 'Good', 'Great', 'Amazing! 🌟'];
 
   function validateUrl(str) {
@@ -681,6 +682,7 @@
       const data = await response.json();
       if (response.ok && data.short_url) {
         currentShortUrl = data.short_url;
+        currentShortCode = data.short_code;
         showResult(data.short_url);
       } else {
         showError(data.detail || 'Something went wrong. Try again.');
@@ -688,6 +690,7 @@
     } catch (err) {
       const fakeCode = btoa(url).slice(0, 7).replace(/[^a-zA-Z0-9]/g, 'x');
       currentShortUrl = `https://treecom.io/${fakeCode}`;
+      currentShortCode = fakeCode;
       showResult(currentShortUrl);
     } finally {
       btn.classList.remove('loading');
@@ -773,7 +776,7 @@
       await fetch('/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ short_url: currentShortUrl, rating: selectedRating, feedback })
+        body: JSON.stringify({ short_code: currentShortCode, rating: selectedRating, feedback })
       });
     } catch (e) { /* demo */ }
     document.getElementById('ratingForm').style.display = 'none';
