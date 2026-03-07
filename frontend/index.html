@@ -796,19 +796,32 @@
   }
 
   function resetAll() {
-    selectedRating = 0; currentShortUrl = '';
+    // Reset state variables
+    selectedRating = 0;
+    currentShortUrl = '';
+    currentShortCode = '';
+
+    // Reset input
     document.getElementById('urlInput').value = '';
     document.getElementById('errorMsg').style.display = 'none';
+
+    // Hide result section
     document.getElementById('resultSection').classList.remove('visible');
-    document.getElementById('ratingSection').classList.remove('visible');
-    document.getElementById('ratingForm').style.display = 'block';
-    document.getElementById('thankyouSection').classList.remove('visible');
+
+    // Reset rating section fully
+    document.getElementById('ratingSection').classList.remove('visible');  // hide whole section
+    document.getElementById('ratingForm').style.display = 'block';         // ensure form is shown (not thankyou)
+    document.getElementById('thankyouSection').classList.remove('visible'); // hide thankyou
+
+    // Reset stars, feedback, button
     document.getElementById('submitRatingBtn').disabled = true;
+    document.getElementById('submitRatingBtn').textContent = 'Submit Feedback';
     document.getElementById('feedbackInput').value = '';
     document.getElementById('charCount').textContent = '0 / 400';
     document.getElementById('starLabel').textContent = 'Click a star to rate';
     document.getElementById('starLabel').classList.remove('active');
     document.querySelectorAll('.star-btn').forEach(s => s.classList.remove('selected', 'hovered'));
+
     document.getElementById('urlInput').focus();
   }
 
