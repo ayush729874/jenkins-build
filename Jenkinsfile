@@ -50,22 +50,26 @@ pipeline {
             }
             steps {
                 script {
+            // Determine which repo to check for latest tag
+                    def repoToCheck = env.BUILD_FRONTEND == "true" ? "frontend" : "backend"
+
                     def latestTag = sh(
                         script: """
-                            curl -s "https://hub.docker.com/v2/repositories/ayush2744/frontend/tags/?page_size=100" \
-                            | grep -o '"name":"v[0-9]*"' \
-                            | grep -o '[0-9]*' \
-                            | sort -n \
-                            | tail -1
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    def nextTag = latestTag ? latestTag.toInteger() + 1 : 1
-                    env.IMAGE_TAG = "v${nextTag}"
-                    echo "New image tag will be: ${env.IMAGE_TAG}"
-                }
+                                 curl -s "https://hub.docker.com/v2/repositories/ayush2744/${repoToCheck}/tags/?page_size=100" \
+                                 | grep -o '"name":"v[0-9]*"' \
+                                 | grep -o '[0-9]*' \
+                                 | sort -n \
+                                 | tail -1
+                             """,
+                             returnStdout: true
+                            ).trim()
+
+                            def nextTag = latestTag ? latestTag.toInteger() + 1 : 1
+                            env.IMAGE_TAG = "v${nextTag}"
+                            echo "New image tag will be: ${env.IMAGE_TAG}"
+                      }
+                 }
             }
-        }
 
         stage('Build Images') {
             when {
