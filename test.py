@@ -54,11 +54,12 @@ try:
     driver.execute_script("arguments[0].click();", submit_btn)
 
     print("Feedback submitted successfully")
-
+import sys
 except Exception as e:
     print("Test failed!")
     print(e)
     traceback.print_exc()
+    sys.exit(1)
 
     # Save screenshot for debugging
     driver.save_screenshot("selenium_debug.png")
