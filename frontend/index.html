@@ -708,6 +708,13 @@
     const now = new Date();
     document.getElementById('createdTime').textContent =
       now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Always ensure rating form is visible and thank-you is hidden
+    // before showing the rating section (handles repeat usage)
+    document.getElementById('ratingForm').removeAttribute('style');
+    document.getElementById('thankyouSection').classList.remove('visible');
+    document.getElementById('thankyouSection').removeAttribute('style');
+
     document.getElementById('resultSection').classList.add('visible');
     document.getElementById('ratingSection').classList.add('visible');
   }
@@ -809,9 +816,10 @@
     document.getElementById('resultSection').classList.remove('visible');
 
     // Reset rating section fully
-    document.getElementById('ratingSection').classList.remove('visible');  // hide whole section
-    document.getElementById('ratingForm').style.display = 'block';         // ensure form is shown (not thankyou)
-    document.getElementById('thankyouSection').classList.remove('visible'); // hide thankyou
+    document.getElementById('ratingSection').classList.remove('visible');      // hide whole section
+    document.getElementById('ratingForm').removeAttribute('style');            // clear inline display:none completely
+    document.getElementById('thankyouSection').classList.remove('visible');    // hide thankyou
+    document.getElementById('thankyouSection').removeAttribute('style');       // clear any inline styles too
 
     // Reset stars, feedback, button
     document.getElementById('submitRatingBtn').disabled = true;
