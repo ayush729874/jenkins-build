@@ -7,13 +7,25 @@ import os
 import string
 import time
 
-
+# ─────────────────────────────────────────
+#   BASE62 ENCODER
+# ─────────────────────────────────────────
 BASE62_CHARS = string.ascii_letters + string.digits  # a-z A-Z 0-9  (62 chars)
 
+# XOR_KEY scrambles sequential IDs so codes look random (not aaaaab, aaaaac...)
+# ID_OFFSET ensures minimum 6 chars from the very first DB record
+XOR_KEY   = 0x5A4E3C2B
+ID_OFFSET = 916_132_832  # = 62^5, first number that produces a 6-char Base62 code
+
 def encode_base62(num: int) -> str:
-    """Convert an integer ID to a Base62 short code."""
-    if num == 0:
-        return BASE62_CHARS[0]
+    """
+    Convert a DB auto-increment ID into a 6-char Base62 short code.
+    XOR scrambling makes consecutive IDs produce visually different codes.
+    e.g.  ID 1  ->  cOHgOk
+          ID 2  ->  cOHgOj
+          ID 50 ->  cOHgFQ
+    """
+    num = (num ^ XOR_KEY) + ID_OFFSET
     code = []
     while num:
         num, remainder = divmod(num, 62)
