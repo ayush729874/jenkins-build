@@ -773,12 +773,24 @@
     btn.textContent = 'Submitting...';
     btn.disabled = true;
     try {
-      await fetch('/feedback', {
+      const res = await fetch('/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ short_code: currentShortCode, rating: selectedRating, feedback })
       });
-    } catch (e) { /* demo */ }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        btn.textContent = 'Submit Feedback';
+        btn.disabled = false;
+        alert(`Failed to submit: ${err.detail || res.status}`);
+        return;
+      }
+    } catch (e) {
+      btn.textContent = 'Submit Feedback';
+      btn.disabled = false;
+      alert(`Network error: ${e.message}`);
+      return;
+    }
     document.getElementById('ratingForm').style.display = 'none';
     document.getElementById('thankyouSection').classList.add('visible');
   }
