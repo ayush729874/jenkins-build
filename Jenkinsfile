@@ -284,6 +284,21 @@ pipeline {
                             cd /tmp
                             rm -rf prod_builds
                         """
+                        sh '''
+                            argocd app sync argocd-prod \
+                                --server argocd.treecom.site:30437 \
+                                --auth-token $ARGOCD_TOKEN \
+                                --plaintext \
+                                --grpc-web
+                            argocd app wait argocd-prod \
+                                --health \
+                                --timeout 400 \
+                                --server argocd.treecom.site:30437 \
+                                --auth-token $ARGOCD_TOKEN \
+                                --plaintext \
+                                --grpc-web
+                            '''
+                            echo "Production Deployment is done"
                     }
                 }
             }
