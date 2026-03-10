@@ -224,13 +224,69 @@ pipeline {
                             returnStatus: true
                         )
                         if (testResult !=0) {
-                            error("Tests failed! Production deployment blocked.")
+                            error("Selenium tests failed! Production deployment blocked.")
                         } 
                     }
                 }
                 echo "All tests passed! ✅"
             }
         }
-          
+        stage('Approval') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
+            steps {
+                timeout(time: 24, unit: 'HOURS') {
+                    input message: """
+                        Tests passed! ✅
+                        Frontend image: ayush2744/frontend:${env.IMAGE_TAG}
+                        Backend image:  ayush2744/backend:${env.IMAGE_TAG}
+                        Approve deployment to Production?
+                    """,
+                    ok: "Deploy to Production"
+                }
+            }
+        }
+        stage('Production Deployment') {
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
+            steps {
+                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
+                    script {
+                        def imageTag = env.IMAGE_TAG
+                        sh '''
+                             cd /tmp
+                             rm -rf k8s_builds
+                             git clone git@github-manifests:ayush729874/k8s_builds.git prod_builds
+                             cd prod_builds
+                             git config user.email "jenkins@ci.com"
+                             git config user.name "Jenkins"
+                         '''
+                        if (env.BUILD_FRONTEND == "true") {
+                            sh """
+                                cd /tmp/prod_builds
+                                sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' prod_builds/deployment.yaml
+                            """
+                        }
+                        if (env.BUILD_BACKEND == "true") {
+                            sh """
+                                cd /tmp/prod_builds
+                                sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' prod_builds/deployment.yaml
+                            """
+                        }
+
+                        sh """
+                            cd /tmp/prod_builds
+                            git add prod_builds/deployment.yaml
+                            git commit -m "Deploy to production: ${imageTag}"
+                            git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
+                            cd /tmp
+                            rm -rf prod_builds
+                        """
+                    }
+                }
+            }
+        } 
     }
 }
