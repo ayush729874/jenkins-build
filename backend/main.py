@@ -13,7 +13,7 @@ import uuid
 # ─────────────────────────────────────────
 BASE62_CHARS = string.ascii_letters + string.digits  # a-z A-Z 0-9  (62 chars)
 
-# XOR_KEY scrambles sequential IDs so codes look random (not aaaaab, aaaaac...)
+
 # ID_OFFSET ensures minimum 6 chars from the very first DB record
 XOR_KEY   = 0x5A4E3C2B
 ID_OFFSET = 916_132_832  # = 62^5, first number that produces a 6-char Base62 code
