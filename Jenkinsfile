@@ -64,7 +64,21 @@ pipeline {
                              returnStdout: true
                             ).trim()
 
-                            def nextTag = latestTag ? latestTag.toInteger() + 1 : 1
+                            def nextTag
+                            if (latestTag) {
+                                def parts = latestTag.split('\\.')
+                                def major = parts[0].toInteger()
+                                def minor = parts[1].toInteger()
+                                if (minor >= 9) {
+                                    major = major + 1
+                                    minor = 0
+                                } else {
+                                    minor = minor + 1
+                                }
+                                nextTag = "${major}.${minor}"
+                            } else {
+                                nextTag = "1.0"
+                            }
                             env.IMAGE_TAG = "v${nextTag}"
                             echo "New image tag will be: ${env.IMAGE_TAG}"
                       }
