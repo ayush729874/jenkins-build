@@ -171,7 +171,7 @@ pipeline {
             }
             steps {
                 script {
-                    sh '''
+                    sh """
                         argocd app wait argocd-app
                             --health \
                             --sync \
@@ -179,7 +179,7 @@ pipeline {
                             --server argocd.treecom.site:30437 \
                             --auth-token $ARGOCD_TOKEN \
                             --insecure
-                    '''
+                    """
                 }
             }
         }
