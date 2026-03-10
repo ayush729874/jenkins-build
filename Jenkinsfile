@@ -322,11 +322,18 @@ pipeline {
 
                         // Always update both services in production
                         // to ensure frontend and backend stay aligned
-                        sh """
-                            cd /tmp/prod_builds
-                            sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' prod_builds/deployment.yaml
-                            sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' prod_builds/deployment.yaml
-                        """
+                        if (env.BUILD_FRONTEND == "true") {
+                            sh """
+                                cd /tmp/prod_builds
+                                sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' prod_builds/deployment.yaml
+                            """
+                        }
+                        if (env.BUILD_BACKEND == "true") {
+                            sh """
+                                cd /tmp/prod_builds
+                                sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' prod_builds/deployment.yaml
+                            """
+                        }
 
                         sh """
                             cd /tmp/prod_builds
