@@ -192,7 +192,7 @@ pipeline {
             steps {
                 script {
                     sh """
-                        argocd app wait argocd-app
+                        argocd app wait argocd-app \
                             --health \
                             --sync \
                             --timeout 400 \
