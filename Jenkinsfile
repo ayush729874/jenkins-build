@@ -3,7 +3,7 @@ pipeline {
     environment {
         FRONTEND_IMAGE = "ayush2744/frontend"
         BACKEND_IMAGE  = "ayush2744/backend"
-        ARGOCD_TOKEN   = credentials('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJhcmdvY2QiLCJzdWIiOiJhZG1pbjphcGlLZXkiLCJuYmYiOjE3NzMxMTgyNDEsImlhdCI6MTc3MzExODI0MSwianRpIjoiYjQ5NzBjYjktYjBhOC00YTIyLThiNjQtN2M2YjhkM2YxMTUyIn0.yl-U88-T7wOIl1u_LrzDnyrnJW3HxDIoHY-NvtXWMRE')
+        ARGOCD_TOKEN   = credentials('argocd-token')
     }
 
     stages {
