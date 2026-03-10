@@ -236,14 +236,24 @@ pipeline {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
-                timeout(time: 24, unit: 'HOURS') {
-                    input message: """
-                        Tests passed! ✅
-                        Frontend image: ayush2744/frontend:${env.IMAGE_TAG}
-                        Backend image:  ayush2744/backend:${env.IMAGE_TAG}
-                        Approve deployment to Production?
-                    """,
-                    ok: "Deploy to Production"
+                script {
+                    def message = "Tests Passed! ✅\n"
+                    message += "Following images ready for Production:\n"
+
+                    if (env.BUILD_FRONTEND == "true") {
+                        message += "Frontend: ayush2744/frontend:${env.IMAGE_TAG}\n"
+                    } else {
+                        message += "Frontend: NO CHANGES (existing image unchanged)\n"
+                    }
+                    if (env.BUILD_BACKEND == "true") {
+                        message += "Backend: ayush2744/backend:${env.IMAGE_TAG}\n"
+                    } else {
+                        message += "Backend: NO CHANGES (existing image unchanged)\n"
+                    }
+                    message += "\nApprove deployment to Production?"
+                    timeout(time: 24, unit: 'HOURS') {
+                        input message: message, ok: "Deploy to Production"
+                    }
                 }
             }
         }
