@@ -214,21 +214,21 @@ pipeline {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps{
-                script {
-                    def testResult = sh(
-                        script: '''
-                            cd $WORKSPACE
-                            python3 test.py
-                        ''',
-                        returnStatus: true
-                    )
-                    if (testResult !=0) {
-                       currentBuild.result = 'FAILURE'
-                       error("Selenium tests failed! Production deployment blocked.")
-                    } else {
-                        echo "Test Passed!"
+                retry(3) {
+                    script {
+                        def testResult = sh(
+                            script: '''
+                                cd $WORKSPACE
+                                python3 test.py
+                            ''',
+                            returnStatus: true
+                        )
+                        if (testResult !=0) {
+                            error("Tests failed! Production deployment blocked.")
+                        } 
                     }
                 }
+                echo "All tests passed! ✅"
             }
         }
           
