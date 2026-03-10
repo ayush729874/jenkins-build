@@ -197,7 +197,7 @@ pipeline {
                             --sync \
                             --timeout 400 \
                             --server argocd.treecom.site:30437 \
-                            --auth-token $ARGOCD_TOKEN \
+                            --auth-token ${ARGOCD_TOKEN} \
                             --plaintext \
                             --grpc-web
                     """
