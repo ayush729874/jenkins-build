@@ -190,17 +190,17 @@ pipeline {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
-                script {
-                    sh """
+                withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
+                    sh '''
                         argocd app wait argocd-app \
                             --health \
                             --sync \
                             --timeout 400 \
                             --server argocd.treecom.site:30437 \
-                            --auth-token ${ARGOCD_TOKEN} \
+                            --auth-token $ARGOCD_TOKEN \
                             --plaintext \
                             --grpc-web
-                    """
+                    '''
                 }
             }
         }
