@@ -4,6 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import traceback
+import sys
 
 options = Options()
 options.add_argument("--headless=new")
@@ -54,7 +55,7 @@ try:
     driver.execute_script("arguments[0].click();", submit_btn)
 
     print("Feedback submitted successfully")
-import sys
+
 except Exception as e:
     print("Test failed!")
     print(e)
