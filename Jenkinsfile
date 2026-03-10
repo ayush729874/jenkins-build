@@ -193,7 +193,7 @@ pipeline {
                             --timeout 400 \
                             --server argocd.treecom.site:30437 \
                             --auth-token $ARGOCD_TOKEN \
-                            --insecure
+                            --plaintext
                     """
                 }
             }
