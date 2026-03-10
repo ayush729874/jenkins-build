@@ -192,6 +192,11 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
                     sh '''
+                        argocd app sync argocd-app \
+                            --server argocd.treecom.site:30437 \
+                            --auth-token $ARGOCD_TOKEN \
+                            --plaintext \
+                            --grpc-web
                         argocd app wait argocd-app \
                             --health \
                             --sync \
