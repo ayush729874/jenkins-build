@@ -223,6 +223,10 @@
     }
 
     .input-row { display: flex; gap: 9px; }
+    @media (max-width: 480px) {
+        .input-row { flex-direction: column; }
+        .shorten-btn { width: 100%; }
+    }
 
     .url-input {
       flex: 1;
