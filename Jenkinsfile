@@ -1,13 +1,19 @@
 pipeline {
     agent { label 'slave2-node-build' }
+
     environment {
         FRONTEND_IMAGE = "ayush2744/frontend"
         BACKEND_IMAGE  = "ayush2744/backend"
+        ARGOCD_SERVER  = "argocd.treecom.site:30437"
         ARGOCD_TOKEN   = credentials('argocd-token')
     }
 
     stages {
-        stage('Check Changes') {
+
+        // ─────────────────────────────────────────
+        // STAGE 1: Detect which services changed
+        // ─────────────────────────────────────────
+        stage('Detect Changes') {
             steps {
                 script {
                     def changedFiles = sh(
@@ -15,11 +21,11 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    echo "Changed files: ${changedFiles}"
+                    echo "Changed files:\n${changedFiles}"
 
                     if (!changedFiles.contains('frontend/') &&
                         !changedFiles.contains('backend/')) {
-                        echo "No changes in frontend or backend, skipping build!"
+                        echo "No changes detected in frontend or backend — skipping pipeline."
                         currentBuild.result = 'NOT_BUILT'
                         return
                     }
@@ -28,13 +34,16 @@ pipeline {
                     env.BUILD_BACKEND  = changedFiles.contains('backend/')  ? "true" : "false"
                     env.SHOULD_BUILD   = "true"
 
-                    echo "Build frontend: ${env.BUILD_FRONTEND}"
-                    echo "Build backend: ${env.BUILD_BACKEND}"
+                    echo "Build frontend : ${env.BUILD_FRONTEND}"
+                    echo "Build backend  : ${env.BUILD_BACKEND}"
                 }
             }
         }
 
-        stage('Checkout') {
+        // ─────────────────────────────────────────
+        // STAGE 2: Pull latest source code
+        // ─────────────────────────────────────────
+        stage('Checkout Source') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
@@ -45,69 +54,79 @@ pipeline {
             }
         }
 
-        stage('Get Latest Tag') {
+        // ─────────────────────────────────────────
+        // STAGE 3: Determine next image version
+        // ─────────────────────────────────────────
+        stage('Resolve Image Tag') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
                 script {
-            
                     def repoToCheck = env.BUILD_FRONTEND == "true" ? "frontend" : "backend"
 
                     def latestTag = sh(
                         script: """
-                                 curl -s "https://hub.docker.com/v2/repositories/ayush2744/${repoToCheck}/tags/?page_size=100" \
-                                 | grep -o '"name":"v[0-9][0-9]*\\(\\.[0-9]*\\)\\?"' \
-                                 | grep -o '[0-9][0-9]*\\(\\.[0-9]*\\)\\?' \
-                                 | sort -t. -k1,1n -k2,2n \
-                                 | tail -1
-                             """,
-                             returnStdout: true
-                            ).trim()
+                            curl -s "https://hub.docker.com/v2/repositories/ayush2744/${repoToCheck}/tags/?page_size=100" \
+                            | grep -o '"name":"v[0-9][0-9]*\\(\\.[0-9]*\\)\\?"' \
+                            | grep -o '[0-9][0-9]*\\(\\.[0-9]*\\)\\?' \
+                            | sort -t. -k1,1n -k2,2n \
+                            | tail -1
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                            def nextTag
-                            if (latestTag) {
-                                if (latestTag.contains('.')) {
-                                    def parts = latestTag.split('\\.')
-                                    def major = parts[0].toInteger()
-                                    def minor = parts[1].toInteger()
-                                    if (minor >= 9) {
-                                        major = major + 1
-                                        minor = 0
-                                    } else {
-                                        minor = minor + 1
-                                    }
-                                    nextTag = "${major}.${minor}"
-                                } else {
-                                    nextTag = "${latestTag.toInteger()}.1"
-                                }
+                    def nextTag
+                    if (latestTag) {
+                        if (latestTag.contains('.')) {
+                            def parts = latestTag.split('\\.')
+                            def major = parts[0].toInteger()
+                            def minor = parts[1].toInteger()
+                            if (minor >= 9) {
+                                major = major + 1
+                                minor = 0
                             } else {
-                                nextTag = "1.0"
+                                minor = minor + 1
                             }
-                            env.IMAGE_TAG = "v${nextTag}"
-                            echo "New image tag will be: ${env.IMAGE_TAG}"
-                               
-                      }
-                 }
-            }
+                            nextTag = "${major}.${minor}"
+                        } else {
+                            nextTag = "${latestTag.toInteger()}.1"
+                        }
+                    } else {
+                        nextTag = "1.0"
+                    }
 
-        stage('Build Images') {
+                    env.IMAGE_TAG = "v${nextTag}"
+                    echo "Next image tag: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────
+        // STAGE 4: Build Docker images
+        // ─────────────────────────────────────────
+        stage('Build') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
                 script {
                     if (env.BUILD_FRONTEND == "true") {
+                        echo "Building frontend image: ${FRONTEND_IMAGE}:${env.IMAGE_TAG}"
                         sh "docker build -t ${FRONTEND_IMAGE}:${env.IMAGE_TAG} ./frontend"
                     }
                     if (env.BUILD_BACKEND == "true") {
+                        echo "Building backend image: ${BACKEND_IMAGE}:${env.IMAGE_TAG}"
                         sh "docker build -t ${BACKEND_IMAGE}:${env.IMAGE_TAG} ./backend"
                     }
                 }
             }
         }
 
-        stage('Push to DockerHub') {
+        // ─────────────────────────────────────────
+        // STAGE 5: Push images to DockerHub registry
+        // ─────────────────────────────────────────
+        stage('Publish to Registry') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
@@ -131,7 +150,10 @@ pipeline {
             }
         }
 
-        stage('Cleanup') {
+        // ─────────────────────────────────────────
+        // STAGE 6: Remove local images after push
+        // ─────────────────────────────────────────
+        stage('Remove Local Images') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
@@ -147,7 +169,10 @@ pipeline {
             }
         }
 
-        stage('Update Deployment YAML') {
+        // ─────────────────────────────────────────
+        // STAGE 7: Update test manifest with new tag
+        // ─────────────────────────────────────────
+        stage('Update Test Manifest') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
@@ -177,26 +202,32 @@ pipeline {
                     sh """
                         cd /tmp/k8s_builds
                         git add test_builds/deployment.yaml
-                        git commit -m "Updated image tag to ${imageTag}"
+                        git commit -m "[CI] Update test image tag to ${imageTag}"
                         git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
-                        cd /tmp
-                        rm -rf k8s_builds
+                        cd /tmp && rm -rf k8s_builds
                     """
                 }
             }
         }
-        stage('Wait for Test Deploy') {
+
+        // ─────────────────────────────────────────
+        // STAGE 8: Sync & wait for test deployment
+        // ─────────────────────────────────────────
+        stage('Deploy to Test') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
                     sh '''
+                        echo "Triggering ArgoCD sync for test environment..."
                         argocd app sync argocd-app \
                             --server argocd.treecom.site:30437 \
                             --auth-token $ARGOCD_TOKEN \
                             --plaintext \
                             --grpc-web
+
+                        echo "Waiting for test deployment to become healthy..."
                         argocd app wait argocd-app \
                             --health \
                             --sync \
@@ -209,11 +240,15 @@ pipeline {
                 }
             }
         }
-        stage('Test'){
+
+        // ─────────────────────────────────────────
+        // STAGE 9: Run automated Selenium tests
+        // ─────────────────────────────────────────
+        stage('Automated Tests') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
-            steps{
+            steps {
                 retry(3) {
                     script {
                         def testResult = sh(
@@ -223,41 +258,51 @@ pipeline {
                             ''',
                             returnStatus: true
                         )
-                        if (testResult !=0) {
-                            error("Selenium tests failed! Production deployment blocked.")
-                        } 
+                        if (testResult != 0) {
+                            error("Selenium tests failed — production deployment blocked.")
+                        }
                     }
                 }
-                echo "All tests passed! ✅"
+                echo "All automated tests passed ✅"
             }
         }
-        stage('Approval') {
+
+        // ─────────────────────────────────────────
+        // STAGE 10: Manual approval gate
+        // ─────────────────────────────────────────
+        stage('Production Approval') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
             steps {
                 script {
-                    def message = "Tests Passed! ✅\n"
-                    message += "Following images ready for Production:\n"
+                    def message = "✅ Automated tests passed!\n\n"
+                    message += "Images ready for production deployment:\n"
 
                     if (env.BUILD_FRONTEND == "true") {
-                        message += "Frontend: ayush2744/frontend:${env.IMAGE_TAG}\n"
+                        message += "  • Frontend : ayush2744/frontend:${env.IMAGE_TAG}\n"
                     } else {
-                        message += "Frontend: NO CHANGES (existing image unchanged)\n"
+                        message += "  • Frontend : NO CHANGES (existing image retained)\n"
                     }
                     if (env.BUILD_BACKEND == "true") {
-                        message += "Backend: ayush2744/backend:${env.IMAGE_TAG}\n"
+                        message += "  • Backend  : ayush2744/backend:${env.IMAGE_TAG}\n"
                     } else {
-                        message += "Backend: NO CHANGES (existing image unchanged)\n"
+                        message += "  • Backend  : NO CHANGES (existing image retained)\n"
                     }
+
                     message += "\nApprove deployment to Production?"
+
                     timeout(time: 24, unit: 'HOURS') {
                         input message: message, ok: "Deploy to Production"
                     }
                 }
             }
         }
-        stage('Production Deployment') {
+
+        // ─────────────────────────────────────────
+        // STAGE 11: Update prod manifest & deploy
+        // ─────────────────────────────────────────
+        stage('Deploy to Production') {
             when {
                 expression { env.SHOULD_BUILD == "true" }
             }
@@ -265,41 +310,41 @@ pipeline {
                 withCredentials([string(credentialsId: 'argocd-token', variable: 'ARGOCD_TOKEN')]) {
                     script {
                         def imageTag = env.IMAGE_TAG
+
                         sh '''
-                             cd /tmp
-                             rm -rf k8s_builds
-                             git clone git@github-manifests:ayush729874/k8s_builds.git prod_builds
-                             cd prod_builds
-                             git config user.email "jenkins@ci.com"
-                             git config user.name "Jenkins"
-                         '''
-                        if (env.BUILD_FRONTEND == "true") {
-                            sh """
-                                cd /tmp/prod_builds
-                                sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' prod_builds/deployment.yaml
-                            """
-                        }
-                        if (env.BUILD_BACKEND == "true") {
-                            sh """
-                                cd /tmp/prod_builds
-                                sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' prod_builds/deployment.yaml
-                            """
-                        }
+                            cd /tmp
+                            rm -rf prod_builds
+                            git clone git@github-manifests:ayush729874/k8s_builds.git prod_builds
+                            cd prod_builds
+                            git config user.email "jenkins@ci.com"
+                            git config user.name "Jenkins"
+                        '''
+
+                        // Always update both services in production
+                        // to ensure frontend and backend stay aligned
+                        sh """
+                            cd /tmp/prod_builds
+                            sed -i 's|image: ayush2744/frontend:.*|image: ayush2744/frontend:${imageTag}|' prod_builds/deployment.yaml
+                            sed -i 's|image: ayush2744/backend:.*|image: ayush2744/backend:${imageTag}|' prod_builds/deployment.yaml
+                        """
 
                         sh """
                             cd /tmp/prod_builds
                             git add prod_builds/deployment.yaml
-                            git commit -m "Deploy to production: ${imageTag}"
+                            git commit -m "[CI] Deploy to production: ${imageTag}"
                             git push git@github-manifests:ayush729874/k8s_builds.git HEAD:main
-                            cd /tmp
-                            rm -rf prod_builds
+                            cd /tmp && rm -rf prod_builds
                         """
+
                         sh '''
+                            echo "Triggering ArgoCD sync for production environment..."
                             argocd app sync argocd-prod \
                                 --server argocd.treecom.site:30437 \
                                 --auth-token $ARGOCD_TOKEN \
                                 --plaintext \
                                 --grpc-web
+
+                            echo "Waiting for production deployment to become healthy..."
                             argocd app wait argocd-prod \
                                 --health \
                                 --timeout 400 \
@@ -307,11 +352,13 @@ pipeline {
                                 --auth-token $ARGOCD_TOKEN \
                                 --plaintext \
                                 --grpc-web
-                            '''
-                            echo "Production Deployment is done"
+                        '''
+
+                        echo "✅ Production deployment complete — ${imageTag} is live!"
                     }
                 }
             }
-        } 
+        }
+
     }
 }
