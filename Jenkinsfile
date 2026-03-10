@@ -209,5 +209,28 @@ pipeline {
                 }
             }
         }
+        stage('Test'){
+            when {
+                expression { env.SHOULD_BUILD == "true" }
+            }
+            steps{
+                script {
+                    def testResult = sh(
+                        script: '''
+                            cd $WORKSPACE
+                            python3 test.py
+                        ''',
+                        returnStatus: true
+                    )
+                    if (testResult !=0) {
+                       currentBuild.result = 'FAILURE'
+                       error("Selenium tests failed! Production deployment blocked.")
+                    } else {
+                        echo "Test Passed!"
+                    }
+                }
+            }
+        }
+          
     }
 }
