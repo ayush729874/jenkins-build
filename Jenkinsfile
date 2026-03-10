@@ -67,7 +67,7 @@ pipeline {
 
                             def nextTag
                             if (latestTag) {
-                                if (latestTag.contains(.)){
+                                if (latestTag.contains('.')) {
                                     def parts = latestTag.split('\\.')
                                     def major = parts[0].toInteger()
                                     def minor = parts[1].toInteger()
