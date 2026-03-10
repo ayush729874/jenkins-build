@@ -51,15 +51,15 @@ pipeline {
             }
             steps {
                 script {
-            // Determine which repo to check for latest tag
+            
                     def repoToCheck = env.BUILD_FRONTEND == "true" ? "frontend" : "backend"
 
                     def latestTag = sh(
                         script: """
                                  curl -s "https://hub.docker.com/v2/repositories/ayush2744/${repoToCheck}/tags/?page_size=100" \
-                                 | grep -o '"name":"v[0-9]*"' \
-                                 | grep -o '[0-9]*' \
-                                 | sort -n \
+                                 | grep -o '"name":"v[0-9][0-9]*\\(\\.[0-9]*\\)\\?"' \
+                                 | grep -o '[0-9][0-9]*\\(\\.[0-9]*\\)\\?' \
+                                 | sort -t. -k1,1n -k2,2n \
                                  | tail -1
                              """,
                              returnStdout: true
@@ -67,21 +67,26 @@ pipeline {
 
                             def nextTag
                             if (latestTag) {
-                                def parts = latestTag.split('\\.')
-                                def major = parts[0].toInteger()
-                                def minor = parts[1].toInteger()
-                                if (minor >= 9) {
-                                    major = major + 1
-                                    minor = 0
+                                if (latestTag.contains(.)){
+                                    def parts = latestTag.split('\\.')
+                                    def major = parts[0].toInteger()
+                                    def minor = parts[1].toInteger()
+                                    if (minor >= 9) {
+                                        major = major + 1
+                                        minor = 0
+                                    } else {
+                                        minor = minor + 1
+                                    }
+                                    nextTag = "${major}.${minor}"
                                 } else {
-                                    minor = minor + 1
+                                    nextTag = "${latestTag.toInteger()}.1"
                                 }
-                                nextTag = "${major}.${minor}"
                             } else {
                                 nextTag = "1.0"
                             }
                             env.IMAGE_TAG = "v${nextTag}"
                             echo "New image tag will be: ${env.IMAGE_TAG}"
+                               
                       }
                  }
             }
