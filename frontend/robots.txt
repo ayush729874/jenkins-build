@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://treecom.site/sitemap.xml
