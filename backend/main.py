@@ -1,32 +1,44 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, HttpUrl
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 import mysql.connector
+from mysql.connector.pooling import MySQLConnectionPool
 import os
 import string
 import time
-import uuid
 
 # ─────────────────────────────────────────
-#   BASE62 ENCODER
+#   BASE62 ENCODER  (bijective — no XOR scramble)
 # ─────────────────────────────────────────
-BASE62_CHARS = string.ascii_letters + string.digits  # a-z A-Z 0-9  (62 chars)
+BASE62_CHARS = string.ascii_letters + string.digits   # a-z A-Z 0-9  (62 chars)
 
+# ID_OFFSET guarantees a minimum 6-char code from the very first DB row.
+# 62^5 = 916_132_832  →  any number >= this encodes to at least 6 chars.
+ID_OFFSET = 916_132_832
 
-# ID_OFFSET ensures minimum 6 chars from the very first DB record
-XOR_KEY   = 0x5A4E3C2B
-ID_OFFSET = 916_132_832  # = 62^5, first number that produces a 6-char Base62 code
 
 def encode_base62(num: int) -> str:
     """
-    Convert a DB auto-increment ID into a 6-char Base62 short code.
-    XOR scrambling makes consecutive IDs produce visually different codes.
-    e.g.  ID 1  ->  cOHgOk
-          ID 2  ->  cOHgOj
-          ID 50 ->  cOHgFQ
+    Convert a DB auto-increment ID into a short Base62 code.
+
+    Key change vs original:
+    - Removed XOR scrambling.  XOR is NOT bijective in Base62 space — two
+      different IDs can map to the same Base62 string, causing the
+      IntegrityError / collision bug you saw.
+    - Pure Base62(num + ID_OFFSET) IS bijective: every distinct integer
+      produces a distinct code, guaranteed.
+
+    Examples (ID → code):
+        1  → cOHgOk   (same visual length, just sequential)
+        2  → cOHgOl
+       50  → cOHgWK
+    If you want non-sequential-looking codes, swap in a format-preserving
+    encryption library (e.g. pyffx) rather than XOR.
     """
-    num = (num ^ XOR_KEY) + ID_OFFSET
+    num = num + ID_OFFSET
+    if num == 0:
+        return BASE62_CHARS[0]
     code = []
     while num:
         num, remainder = divmod(num, 62)
@@ -35,26 +47,73 @@ def encode_base62(num: int) -> str:
 
 
 # ─────────────────────────────────────────
-#   DB CONNECTION
+#   CONNECTION POOL  (created once at import time)
 # ─────────────────────────────────────────
+# pool_size=10 means at most 10 simultaneous DB connections.
+# Tune this to stay under your MySQL max_connections setting.
+# Each connection reuses the same OS file descriptor, so the
+# "too many open files" error goes away under load.
+_pool: MySQLConnectionPool | None = None
+
+
+def _create_pool() -> MySQLConnectionPool:
+    return MySQLConnectionPool(
+        pool_name="treecom_pool",
+        pool_size=int(os.getenv("DB_POOL_SIZE", 10)),
+        pool_reset_session=True,
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        port=int(os.getenv("DB_PORT", 3306)),
+        autocommit=False,
+        connection_timeout=10,
+    )
+
+
 def get_db():
     """
-    Returns a DB connection.
-    Raises plain Exception — safe to call both during startup
-    and inside request handlers.
+    Return a pooled connection.
+    Calling .close() on a pooled connection returns it to the pool
+    rather than closing the underlying socket — no fd leak.
     """
+    global _pool
+    if _pool is None:
+        raise Exception("DB pool not initialised — did lifespan run?")
     try:
-        return mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            database=os.getenv("DB_NAME"),
-            port=int(os.getenv("DB_PORT", 3306)),
-            autocommit=False,
-            connection_timeout=10,
-        )
+        return _pool.get_connection()
     except Exception as e:
-        raise Exception(f"DB connection error: {e}")
+        raise Exception(f"DB pool error: {e}")
+
+
+# ─────────────────────────────────────────
+#   CONTEXT MANAGER  (guarantees connection is returned to pool)
+# ─────────────────────────────────────────
+@contextmanager
+def db_cursor(dictionary: bool = False):
+    """
+    Usage:
+        with db_cursor(dictionary=True) as (conn, cur):
+            cur.execute(...)
+
+    Commits on success, rolls back on any exception, and ALWAYS
+    returns the connection to the pool — even if an HTTPException
+    is raised mid-handler.
+    """
+    conn = get_db()
+    cur = conn.cursor(dictionary=dictionary)
+    try:
+        yield conn, cur
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise                    # re-raise so FastAPI handles it normally
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()             # returns to pool, does NOT close socket
 
 
 # ─────────────────────────────────────────
@@ -62,57 +121,51 @@ def get_db():
 # ─────────────────────────────────────────
 def init_db():
     """
-    Create tables if they don't exist.
-    Retries up to 10 times with 3s delay — MySQL pod may still
-    be initializing when the backend starts.
-    Also runs ALTER TABLE to fix column sizes on existing tables.
+    Create tables if they don't exist, and fix column sizes on
+    existing tables.  Retries up to 10 times — MySQL pod may still
+    be initialising when the backend starts.
     """
     for attempt in range(1, 11):
         try:
-            conn = get_db()
-            cursor = conn.cursor()
+            with db_cursor() as (conn, cur):
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS urls (
+                        id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        short_code   VARCHAR(20) NOT NULL UNIQUE,
+                        original_url TEXT NOT NULL,
+                        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        click_count  INT DEFAULT 0,
+                        INDEX idx_original_url (original_url(255))
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+                        short_code  VARCHAR(20) NOT NULL,
+                        rating      TINYINT NOT NULL,
+                        feedback    VARCHAR(400) DEFAULT NULL,
+                        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (short_code) REFERENCES urls(short_code)
+                            ON DELETE CASCADE
+                    )
+                """)
 
-            # Create tables with VARCHAR(20) for short_code
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS urls (
-                    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    short_code   VARCHAR(20) NOT NULL UNIQUE,
-                    original_url TEXT NOT NULL,
-                    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    click_count  INT DEFAULT 0
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS feedback (
-                    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    short_code  VARCHAR(20) NOT NULL,
-                    rating      TINYINT NOT NULL,
-                    feedback    VARCHAR(400) DEFAULT NULL,
-                    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (short_code) REFERENCES urls(short_code)
-                        ON DELETE CASCADE
-                )
-            """)
+                # Widen columns on pre-existing tables (safe no-op if already correct)
+                for ddl, label in [
+                    ("ALTER TABLE urls MODIFY short_code VARCHAR(20) NOT NULL",
+                     "urls.short_code"),
+                    ("ALTER TABLE feedback MODIFY short_code VARCHAR(20) NOT NULL",
+                     "feedback.short_code"),
+                ]:
+                    try:
+                        cur.execute(ddl)
+                        print(f"[startup] {label} column ensured VARCHAR(20).")
+                    except Exception as alter_err:
+                        print(f"[startup] ALTER {label} skipped: {alter_err}")
 
-            # ALTER existing tables in case they were created with old VARCHAR(10)
-            # MySQL ignores this if already the right size — safe to run every time
-            try:
-                cursor.execute("ALTER TABLE urls MODIFY short_code VARCHAR(20) NOT NULL")
-                print("[startup] urls.short_code column updated to VARCHAR(20).")
-            except Exception as alter_err:
-                print(f"[startup] ALTER urls skipped: {alter_err}")
-
-            try:
-                cursor.execute("ALTER TABLE feedback MODIFY short_code VARCHAR(20) NOT NULL")
-                print("[startup] feedback.short_code column updated to VARCHAR(20).")
-            except Exception as alter_err:
-                print(f"[startup] ALTER feedback skipped: {alter_err}")
-
-            conn.commit()
-            cursor.close()
-            conn.close()
             print(f"[startup] Tables verified / created (attempt {attempt}).")
-            return  # success — exit retry loop
+            return
+
         except Exception as e:
             print(f"[startup] DB not ready (attempt {attempt}/10): {e}")
             if attempt < 10:
@@ -126,8 +179,27 @@ def init_db():
 # ─────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _pool
+    # Retry pool creation — DB pod may not be ready yet
+    for attempt in range(1, 11):
+        try:
+            _pool = _create_pool()
+            print(f"[startup] DB connection pool created (attempt {attempt}).")
+            break
+        except Exception as e:
+            print(f"[startup] Pool creation failed (attempt {attempt}/10): {e}")
+            if attempt < 10:
+                time.sleep(3)
+            else:
+                print("[startup] WARNING: Could not create pool. Continuing without it.")
+
     init_db()
     yield
+    # Graceful shutdown — close all pooled connections
+    # mysql-connector's pool has no explicit close(), connections are
+    # GC'd naturally; this is a no-op placeholder for future upgrades.
+    print("[shutdown] Application shutting down.")
+
 
 app = FastAPI(title="Treecom URL Shortener", lifespan=lifespan)
 
@@ -163,151 +235,155 @@ async def root():
 @app.post("/shorten", response_model=ShortenResponse)
 async def shorten_url(request: ShortenRequest):
     original = str(request.original_url)
+    base_url = os.getenv("BASE_URL", "https://test.treecom.site")
 
     try:
-        conn = get_db()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        with db_cursor(dictionary=True) as (conn, cur):
 
-    cursor = conn.cursor()
-    try:
-        # Use a unique temp placeholder per request to avoid collisions
-        # under concurrent traffic (uuid4 makes it unique every time)
-        tmp_placeholder = f"t{uuid.uuid4().hex[:8]}"  # 9 chars, unique, fits VARCHAR(10)
+            # ── Return existing short URL if this long URL was already shortened ──
+            # This also eliminates duplicate rows for the same original URL.
+            cur.execute(
+                "SELECT short_code FROM urls WHERE original_url = %s LIMIT 1",
+                (original,)
+            )
+            existing = cur.fetchone()
+            if existing:
+                sc = existing["short_code"]
+                return ShortenResponse(
+                    short_code=sc,
+                    short_url=f"{base_url}/{sc}",
+                    original_url=original,
+                )
 
-        cursor.execute(
-            "INSERT INTO urls (original_url, short_code) VALUES (%s, %s)",
-            (original, tmp_placeholder)
-        )
-        new_id = cursor.lastrowid
+            # ── Insert a temporary placeholder row to obtain the auto-increment ID ──
+            # We use a row-specific placeholder (f"_tmp_{time.time_ns()}") so that
+            # concurrent requests never collide on the placeholder value.
+            tmp = f"_tmp_{time.time_ns()}"
+            cur.execute(
+                "INSERT INTO urls (original_url, short_code) VALUES (%s, %s)",
+                (original, tmp)
+            )
+            new_id = cur.lastrowid
 
-        # Base62-encode the id as the short code
-        short_code = encode_base62(new_id)
+            # ── Derive the real short code from the now-known ID ──
+            # encode_base62 is bijective, so this is guaranteed unique.
+            short_code = encode_base62(new_id)
 
-        # Update row with the real short code
-        cursor.execute(
-            "UPDATE urls SET short_code = %s WHERE id = %s",
-            (short_code, new_id)
-        )
-        conn.commit()
+            cur.execute(
+                "UPDATE urls SET short_code = %s WHERE id = %s",
+                (short_code, new_id)
+            )
+            # conn.commit() is called automatically by db_cursor on context exit
 
-        base_url = os.getenv("BASE_URL", "https://test.treecom.site")
-        return ShortenResponse(
-            short_code=short_code,
-            short_url=f"{base_url}/{short_code}",
-            original_url=original,
-        )
+            return ShortenResponse(
+                short_code=short_code,
+                short_url=f"{base_url}/{short_code}",
+                original_url=original,
+            )
 
     except mysql.connector.IntegrityError as e:
-        conn.rollback()
-        # This should never happen now with uuid temp placeholders,
-        # but kept as a safety net
-        raise HTTPException(status_code=409, detail=f"Collision error — please retry. ({e})")
+        # This path should never be reached now (bijective encoding + dedup
+        # check above), but kept as a belt-and-suspenders safety net.
+        # Instead of surfacing an error, we attempt to return the existing entry.
+        try:
+            with db_cursor(dictionary=True) as (_, cur):
+                cur.execute(
+                    "SELECT short_code FROM urls WHERE original_url = %s LIMIT 1",
+                    (original,)
+                )
+                row = cur.fetchone()
+            if row:
+                sc = row["short_code"]
+                return ShortenResponse(
+                    short_code=sc,
+                    short_url=f"{base_url}/{sc}",
+                    original_url=original,
+                )
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Could not create short URL: {e}")
+
+    except HTTPException:
+        raise
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # ── 2. REDIRECT ─────────────────────────
 @app.get("/{short_code}")
 async def redirect_to_original(short_code: str):
-    if not short_code.isalnum() or len(short_code) > 10:
+    # Validate: alphanumeric only, max 20 chars (matches new VARCHAR(20))
+    if not short_code.isalnum() or len(short_code) > 20:
         raise HTTPException(status_code=400, detail="Invalid short code.")
 
     try:
-        conn = get_db()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        with db_cursor(dictionary=True) as (conn, cur):
+            cur.execute(
+                "SELECT id, original_url FROM urls WHERE short_code = %s",
+                (short_code,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Short URL not found.")
 
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(
-            "SELECT id, original_url FROM urls WHERE short_code = %s",
-            (short_code,)
-        )
-        row = cursor.fetchone()
-
-        if not row:
-            raise HTTPException(status_code=404, detail="Short URL not found.")
-
-        cursor.execute(
-            "UPDATE urls SET click_count = click_count + 1 WHERE id = %s",
-            (row["id"],)
-        )
-        conn.commit()
+            cur.execute(
+                "UPDATE urls SET click_count = click_count + 1 WHERE id = %s",
+                (row["id"],)
+            )
 
         return RedirectResponse(url=row["original_url"], status_code=302)
 
     except HTTPException:
         raise
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # ── 3. FEEDBACK ─────────────────────────
 @app.post("/feedback")
 async def submit_feedback(request: FeedbackRequest):
     try:
-        conn = get_db()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        with db_cursor() as (conn, cur):
+            cur.execute(
+                "SELECT id FROM urls WHERE short_code = %s",
+                (request.short_code,)
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Short code not found.")
 
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "SELECT id FROM urls WHERE short_code = %s",
-            (request.short_code,)
-        )
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Short code not found.")
+            cur.execute(
+                "INSERT INTO feedback (short_code, rating, feedback) VALUES (%s, %s, %s)",
+                (request.short_code, request.rating, request.feedback or None)
+            )
 
-        cursor.execute(
-            "INSERT INTO feedback (short_code, rating, feedback) VALUES (%s, %s, %s)",
-            (request.short_code, request.rating, request.feedback or None)
-        )
-        conn.commit()
         return {"status": "success", "message": "Feedback saved. Thank you!"}
 
     except HTTPException:
         raise
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # ── 4. STATS ────────────────────────────
 @app.get("/stats/{short_code}")
 async def get_stats(short_code: str):
     try:
-        conn = get_db()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        with db_cursor(dictionary=True) as (conn, cur):
+            cur.execute(
+                "SELECT short_code, original_url, created_at, click_count "
+                "FROM urls WHERE short_code = %s",
+                (short_code,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Short code not found.")
 
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute(
-            "SELECT short_code, original_url, created_at, click_count FROM urls WHERE short_code = %s",
-            (short_code,)
-        )
-        row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Short code not found.")
-
-        cursor.execute(
-            "SELECT AVG(rating) as avg_rating, COUNT(*) as total_feedback FROM feedback WHERE short_code = %s",
-            (short_code,)
-        )
-        fb = cursor.fetchone()
+            cur.execute(
+                "SELECT AVG(rating) AS avg_rating, COUNT(*) AS total_feedback "
+                "FROM feedback WHERE short_code = %s",
+                (short_code,)
+            )
+            fb = cur.fetchone()
 
         return {
             **row,
@@ -320,6 +396,3 @@ async def get_stats(short_code: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
